@@ -11,21 +11,14 @@ author: "陈东"  # Yourname
 github_username: "dmelon" #
 repository: dmelon/dmelon.github.io
 disqus_shortname:  #Add Disqus comment to your post
-twitter:
-  username:  #twitter Username
-facebook:
-  app_id: # Facebook App id
-  admins: # Facebook id
-  publisher: # Facebook Page ID
+weibo:
+  username: dmelon_
 
 logo: /assets/icons/512.png
 social:
-  name: #Your name
+  name: dmelon
   links:
-    - https://twitter.com/
-    - https://www.facebook.com/
-    - https://www.linkedin.com/in/
-    - https://plus.google.com/u/0/
+    - https://weibo.com/u/7038140796
     - https://github.com/dmelon
 
 sass:
