@@ -3,7 +3,7 @@ title: dmelon
 shortname: dmelon
 email: chend.1991@gmail.com
 description: > # this means to ignore newlines until "baseurl:"
-  非专业工程师.
+  非专业工程师
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "https://dmelon.github.io" # the base hostname & protocol for your site
 google_analytics: UA-XXXXXXX-1 #your GA unique id, e.g. UA-xxxxxxxx-x

@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Subcribe via Email
+title: 邮件订阅
 permalink: /subscribe
 ---
 

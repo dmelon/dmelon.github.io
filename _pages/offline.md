@@ -1,9 +1,9 @@
 ---
 layout: default
-title: You're Offline
+title: 离线
 permalink: /offline.html
 sitemap: false
 ---
 
-# You're Offline
-The page can be loaded once device connected to a network.
+# 您已离线
+请连接网络后重新加载
