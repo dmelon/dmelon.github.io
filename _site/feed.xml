@@ -1,15 +1,21 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.7.4">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2019-06-09T13:51:00+08:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">dmelon</title><subtitle>非专业工程师
-</subtitle><author><name>陈东</name></author><entry><title type="html">探索 Run Loop</title><link href="http://localhost:4000/blog/%E6%8E%A2%E7%B4%A2-Run-Loop" rel="alternate" type="text/html" title="探索 Run Loop" /><published>2019-06-09T00:00:00+08:00</published><updated>2019-06-09T00:00:00+08:00</updated><id>http://localhost:4000/blog/%E6%8E%A2%E7%B4%A2-Run-Loop</id><content type="html" xml:base="http://localhost:4000/blog/%E6%8E%A2%E7%B4%A2-Run-Loop">&lt;h2 id=&quot;勤劳的-run-loop&quot;&gt;勤劳的 Run Loop&lt;/h2&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.7.4">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2019-06-09T14:18:02+08:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">dmelon</title><subtitle>非专业工程师
+</subtitle><author><name>陈东</name></author><entry><title type="html">探索 Run Loop</title><link href="http://localhost:4000/blog/%E6%8E%A2%E7%B4%A2-Run-Loop" rel="alternate" type="text/html" title="探索 Run Loop" /><published>2019-06-09T00:00:00+08:00</published><updated>2019-06-09T00:00:00+08:00</updated><id>http://localhost:4000/blog/%E6%8E%A2%E7%B4%A2-Run-Loop</id><content type="html" xml:base="http://localhost:4000/blog/%E6%8E%A2%E7%B4%A2-Run-Loop">&lt;h1 id=&quot;勤劳的-run-loop&quot;&gt;勤劳的 Run Loop&lt;/h1&gt;
 &lt;p&gt;一个可交互的应用程序，可以在用户使用时立即响应，执行一些任务。在任务完成，用户也没有更多操作时，进入休眠，等待下次的用户操作。就像一位勤劳的佣人，只要有吩咐，立马就会忙碌起来。工作完成后，总是站在身边安静待命。&lt;/p&gt;
 
 &lt;p&gt;在 iOS 程序中，Run Loop 就是这么一个勤劳的佣人，要么在执行当下的任务，要么在等待下一个指令。更具体一点，一个 iOS App 将负责处理用户交互的工作放在主线程上，并由这个线程上的 Run Loop 充当这个佣人的角色。&lt;/p&gt;
 
 &lt;p&gt;那么，我们从如何创建一个 Run Loop 开始。&lt;/p&gt;
-&lt;h2 id=&quot;创建-run-loop&quot;&gt;创建 Run Loop&lt;/h2&gt;
+&lt;blockquote&gt;
+  &lt;p&gt;本文的代码可以在&lt;a href=&quot;https://github.com/dmelon/DMRunLoopDemo&quot;&gt;这里&lt;/a&gt;找到。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h1 id=&quot;创建-run-loop&quot;&gt;创建 Run Loop&lt;/h1&gt;
 &lt;p&gt;线程和 Run Loop 被设计成是 1-1 或者 1-0 的关系。也就是说，一个线程可以有最多一个 Run Loop，也可以没有 Run Loop。为了保证这种关系，Run Loop 只会在一个线程第一次读 Run Loop 实例时创建。也就是说，如果 &lt;code class=&quot;highlighter-rouge&quot;&gt;[NSRunLoop getCurrentRunLoop]&lt;/code&gt; 执行时，当前线程没有 Run Loop，则创建一个。如果有，则返回已创建的实例。在 iOS 中，主线程的 Run Loop 被设计用来处理用户的交互事件，在 App 启动时被默认创建创。但是对于其它线程来说，Run Loop 默认是不存在的，需要显式调用才能创建。&lt;/p&gt;
 
 &lt;p&gt;创建 Run Loop 确实十分简单，但是并不是创建就会默认跑起来。Run Loop，顾名思义，是要 &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt; 起来才算是真正进入工作状态。在真正跑起一个 Run Loop 之前，我们先从 main Run Loop 上看看，跑起来的 Run Loop 是什么样子吧。&lt;/p&gt;
-&lt;h2 id=&quot;run-loop-的状态监听&quot;&gt;Run Loop 的状态监听&lt;/h2&gt;
+
+&lt;h1 id=&quot;run-loop-的状态监听&quot;&gt;Run Loop 的状态监听&lt;/h1&gt;
+
 &lt;p&gt;NSRunLoop 并没有读取或监听状态的 API，但幸运的是，我们在 CFRunLoop 中找到了。&lt;/p&gt;
 &lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;callback&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;CFRunLoopObserverRef&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopActivity&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;...;&lt;/span&gt;
     &lt;span class=&quot;n&quot;&gt;CFRunLoopObserverRef&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;observer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopObserverCreateWithHandler&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;CFAllocatorGetDefault&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt;
@@ -18,6 +24,7 @@
     &lt;span class=&quot;n&quot;&gt;CFRunLoopRef&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;cfRunLoop&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopGetCurrent&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
     &lt;span class=&quot;n&quot;&gt;CFRunLoopAddObserver&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;cfRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;observer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;kCFRunLoopCommonModes&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
 &lt;p&gt;使用上面的代码，就可以拿到 activity (即 Run Loop 的状态) 变化时的回调。翻看文档，&lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopActivity&lt;/code&gt; 是一个枚举，共有 6 个 case：&lt;/p&gt;
 &lt;ol&gt;
   &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;entry&lt;/code&gt;：进入一个 loop&lt;/li&gt;
@@ -29,56 +36,60 @@
 &lt;/ol&gt;
 
 &lt;p&gt;现在，我们需要一个 &lt;code class=&quot;highlighter-rouge&quot;&gt;DMRunLoopObserver&lt;/code&gt; 类，它封装了上面监听的核心代码，并向外提供 Run Loop activity 的变化回调，完成后它的接口大概是下面这个样子：&lt;/p&gt;
+
 &lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;@interface&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;DMRunLoopObserver&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;NSObject&lt;/span&gt;
 &lt;span class=&quot;k&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;instancetype&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;observeRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSRunLoop&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;rl&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;callback&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;CFRunLoopActivity&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;callback&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 &lt;span class=&quot;k&quot;&gt;@end&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
 &lt;p&gt;接着，我们写一个 Demo 程序，在 App 的 root view controller 里添加了 Run Loop 的监听，并在回调里打印了 activity，运行程序，发现了以下的打印结果:&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;...
-Run Loop Before Timers
-Run Loop Before Sources
-Run Loop Before Waiting
-Run Loop After Waiting
-Run Loop Before Timers
-Run Loop Before Sources
-Run Loop Before Waiting
-Run Loop After Waiting
-Run Loop Before Timers
-Run Loop Before Sources
-Run Loop Before Waiting
+
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Timers&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sources&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Waiting&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;After&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Waiting&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Timers&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sources&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Waiting&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;After&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Waiting&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Timers&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sources&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Waiting&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;这里可以看到，Run Loop 在经历了几次状态循环之后，最终停在了 &lt;code class=&quot;highlighter-rouge&quot;&gt;beforeWaiting&lt;/code&gt;。如果我们现在在空白屏幕处按下（没有抬起），则又多了下面的打印&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Run Loop After Waiting
-Run Loop Before Timers
-Run Loop Before Sources
-Run Loop Before Timers
-Run Loop Before Sources
-Run Loop Before Timers
-Run Loop Before Sources
-Run Loop Before Timers
-Run Loop Before Sources
-Run Loop Before Waiting
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;After&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Waiting&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Timers&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sources&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Timers&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sources&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Timers&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sources&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Timers&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sources&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Waiting&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;抬起后，又多了几行&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Run Loop After Waiting
-Run Loop Before Timers
-Run Loop Before Sources
-Run Loop Before Timers
-Run Loop Before Sources
-Run Loop Before Waiting
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;After&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Waiting&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Timers&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sources&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Timers&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sources&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Waiting&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;从上面的 log 可以看出，6 种 activity 少了 &lt;code class=&quot;highlighter-rouge&quot;&gt;entry&lt;/code&gt; 和 &lt;code class=&quot;highlighter-rouge&quot;&gt;exit&lt;/code&gt;。为了得到想要的 log，我们手动调用 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopStop(CFRunLoopGetCurrent())&lt;/code&gt; 方法来退出 Main Run Loop。此时，控制台上多出了几行 log：&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Run Loop Exit
-Run Loop Entry
-Run Loop Before Timers
-Run Loop Before Sources
-...
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Exit&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Entry&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Timers&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;Run&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Loop&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Before&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Sources&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;第一行 log 表示我们确实成功退出了 Main Run Loop，但是紧接着就自动地重新进入了 &lt;code class=&quot;highlighter-rouge&quot;&gt;entry&lt;/code&gt; 状态，重复之前的状态循环。Main Run Loop 重新开始循环的原因我们暂且不理，但是到此我们可以绘出 Run Loop 整个循环周期的状态流了：&lt;/p&gt;
+&lt;p&gt;第一行 log 表示我们确实成功退出了 Main Run Loop，但是紧接着就自动地重新进入了 &lt;code class=&quot;highlighter-rouge&quot;&gt;entry&lt;/code&gt; 状态，重复之前的状态循环。Main Run Loop 重新开始循环的原因我们暂且不理，但是到此我们可以绘出 Run Loop 整个循环周期的状态流了：
+&lt;img src=&quot;https://raw.githubusercontent.com/dmelon/dmelon.github.io/master/assets/images/runloop_activities.png&quot; alt=&quot;activities&quot; /&gt;&lt;/p&gt;
 
 &lt;p&gt;从这张图上，可以看到两种 loop：&lt;/p&gt;
 &lt;ol&gt;
@@ -95,21 +106,24 @@ Run Loop Before Sources
 &lt;/ol&gt;
 
 &lt;p&gt;接下来，我们就要解决 activity 中出现的 timers 和 sources 的意思，然后结合 &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt; 函数来理解这两种 loop 模式。&lt;/p&gt;
-&lt;h2 id=&quot;timers--sources&quot;&gt;Timers &amp;amp; Sources&lt;/h2&gt;
-&lt;p&gt;简而言之，Timers 和 Sources 是 event 到 RunLoop 的入口。Timers 是按时间来发送 event 给 Run Loop，Sources 则是自由地决定如何给 Run Loop 发送 event。Run Loop 只需要 &lt;code class=&quot;highlighter-rouge&quot;&gt;add&lt;/code&gt; 关心的 Timers 和 Sources 就可以开始处理对应的 event，在不关心的时候 &lt;code class=&quot;highlighter-rouge&quot;&gt;remove&lt;/code&gt; 掉即可。&lt;/p&gt;
 
-&lt;h3 id=&quot;timers&quot;&gt;Timers&lt;/h3&gt;
+&lt;h1 id=&quot;timers--sources&quot;&gt;Timers &amp;amp; Sources&lt;/h1&gt;
+
+&lt;p&gt;简而言之，Timers 和 Sources 是 event 到 RunLoop 的入口。Timers 是按时间来发送 event 给 Run Loop，Sources 则是自由地决定如何给 Run Loop 发送 event。Run Loop 只需要 &lt;code class=&quot;highlighter-rouge&quot;&gt;add&lt;/code&gt; 关心的 Timers 和 Sources 就可以开始处理对应的 event，在不关心的时候 &lt;code class=&quot;highlighter-rouge&quot;&gt;remove&lt;/code&gt; 掉即可。
+&lt;img src=&quot;https://raw.githubusercontent.com/dmelon/dmelon.github.io/master/assets/images/runloop_sources.png&quot; alt=&quot;sources&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;timers&quot;&gt;Timers&lt;/h2&gt;
 &lt;p&gt;Timer 可能是最简单的 event 源了，可以使用 &lt;code class=&quot;highlighter-rouge&quot;&gt;NSTimer&lt;/code&gt;，也可以像下面这段代码一样，使用 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFTimerRef&lt;/code&gt; 添加 Timer 到 Run Loop 上：&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;        __block int32_t count = 0;
-        CFRunLoopTimerRef timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDe
-timer) {
-            count += 1;
-            NSLog(@&quot;background run loop: tick %d&quot;, count);
-        });
-        CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer, kCFRunLoopDefaultMode);
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;        &lt;span class=&quot;n&quot;&gt;__block&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int32_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;CFRunLoopTimerRef&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;timer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopTimerCreateWithHandler&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kCFAllocatorDe&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;timer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;NSLog&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;@&quot;background run loop: tick %d&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;CFRunLoopAddTimer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;CFRunLoopGetCurrent&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;timer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;kCFRunLoopDefaultMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;h3 id=&quot;sources&quot;&gt;Sources&lt;/h3&gt;
+&lt;h2 id=&quot;sources&quot;&gt;Sources&lt;/h2&gt;
 &lt;p&gt;对于自定义的 Sources，Run Loop 会在 3 个时机下去调用对应的函数，分别称为 3 个 routine，它们分别是：&lt;/p&gt;
 &lt;ol&gt;
   &lt;li&gt;schedule routine：加入到 Run Loop 时，由 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopAddSource&lt;/code&gt; 函数触发&lt;/li&gt;
@@ -153,50 +167,50 @@ timer) {
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;为了更方便地操作 Source，我们把 3 个 routine 的调用也写在该类里面：&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;- (void)addToRunLoop:(NSRunLoop *)rl
-{
-    CFRunLoopAddSource([rl getCFRunLoop], _source, kCFRunLoopDefaultMode);
-}
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;addToRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSRunLoop&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;rl&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;CFRunLoopAddSource&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;getCFRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;_source&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;kCFRunLoopDefaultMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 
-- (void)fireOnRunLoop:(NSRunLoop *)rl
-{
-    CFRunLoopSourceSignal(_source);
-    CFRunLoopWakeUp([rl getCFRunLoop]);
-}
+&lt;span class=&quot;k&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;fireOnRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSRunLoop&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;rl&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;CFRunLoopSourceSignal&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;_source&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;CFRunLoopWakeUp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;getCFRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 
-- (void)removeFromRunLoop:(NSRunLoop *)rl
-{
-    CFRunLoopRemoveSource([rl getCFRunLoop], _source, kCFRunLoopDefaultMode);
-}
+&lt;span class=&quot;k&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;removeFromRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSRunLoop&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;rl&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;CFRunLoopRemoveSource&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;getCFRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;_source&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;kCFRunLoopDefaultMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;对于 &lt;code class=&quot;highlighter-rouge&quot;&gt;fireOnRunLoop&lt;/code&gt; 方法实现来说，由于 Run Loop 可能当时处于 &lt;code class=&quot;highlighter-rouge&quot;&gt;beforeWaiting&lt;/code&gt; 的状态，所以在 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopSourceSignal&lt;/code&gt; 之后，触发 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopWakeUp&lt;/code&gt;，使得 Run Loop 可以尽快调用 Source 的 perform routine。
 其实到这里，作为 Run Loop Sources 的功能框架已经完成了。不过，为了下面探究的方便，我们对 &lt;code class=&quot;highlighter-rouge&quot;&gt;DMRunLoopSource&lt;/code&gt; 做一个周期性发送 event 的功能。通过 GCD 延迟派发和递归调用，就可以简单实现这个方法：&lt;/p&gt;
 
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;- (void)fireWithInterval:(NSTimeInterval)interval repeats:(BOOL)repeats onRunLoop:(NSRunLoop *)rl
-{
-    if (interval &amp;lt; 0) {
-        [self fireOnRunLoop:rl];
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;fireWithInterval&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSTimeInterval&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;interval&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;repeats&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BOOL&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;repeats&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;onRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSRunLoop&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;rl&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;interval&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;self&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;fireOnRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
 
-    } else {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(interval * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self fireOnRunLoop:rl];
-            if (repeats) {
-                [self fireWithInterval:interval repeats:repeats onRunLoop:rl];
-            }
-        });
-    }
-}
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;dispatch_after&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dispatch_time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DISPATCH_TIME_NOW&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int64_t&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;interval&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;NSEC_PER_SEC&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dispatch_get_main_queue&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+            &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;self&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;fireOnRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;repeats&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+                &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;self&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;fireWithInterval&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;interval&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;repeats&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;repeats&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;onRunLoop&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+            &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;h3 id=&quot;port&quot;&gt;Port&lt;/h3&gt;
+&lt;h2 id=&quot;port&quot;&gt;Port&lt;/h2&gt;
 &lt;p&gt;除了 Timers 和 Sources，Run Loop 还支持另一种 event 源，它就是 &lt;code class=&quot;highlighter-rouge&quot;&gt;NSPort&lt;/code&gt;。它是一种端对端的通信逻辑，通过 2 个 &lt;code class=&quot;highlighter-rouge&quot;&gt;NSPort&lt;/code&gt; 发送 &lt;code class=&quot;highlighter-rouge&quot;&gt;NSPortMessage&lt;/code&gt;，不仅可以用于线程间的通讯，还可以用于进程间的通讯。然而，这种通讯方式由于性能问题，已经不再建议使用了，如果非要说它还有一个用途的话，就是给 Run Loop 加一个 Port，让 Run Loop 不退出吧（AFNetworking 2.x 就是这个干的）。真对 Port 感兴趣的话，请参考&lt;a href=&quot;https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/DistrObjects/DistrObjects.html#//apple_ref/doc/uid/10000102i&quot;&gt;这里&lt;/a&gt;。&lt;/p&gt;
 
 &lt;p&gt;OK，完事具备，现在我们有了 Timers 和 Sources，是时候让 Run Loop 真正 &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt; 起来了！&lt;/p&gt;
 
-&lt;h2 id=&quot;run-&quot;&gt;Run !&lt;/h2&gt;
+&lt;h1 id=&quot;run-&quot;&gt;Run !&lt;/h1&gt;
 &lt;p&gt;首先，我们还是先做一些准备工作。创建一个 &lt;code class=&quot;highlighter-rouge&quot;&gt;DMBackgroundThread&lt;/code&gt; 类，拥有 3 个实例：&lt;code class=&quot;highlighter-rouge&quot;&gt;NSThread&lt;/code&gt;、&lt;code class=&quot;highlighter-rouge&quot;&gt;NSRunLoop&lt;/code&gt; 和 &lt;code class=&quot;highlighter-rouge&quot;&gt;DMRunLoopObserver&lt;/code&gt;：&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;@interface&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;DMBackgroundThread&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;@interface&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;DMBackgroundThread&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
 &lt;span class=&quot;k&quot;&gt;@property&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nonatomic&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;strong&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;NSThread&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;kr&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 &lt;span class=&quot;k&quot;&gt;@property&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nonatomic&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;strong&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;NSRunLoop&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 &lt;span class=&quot;k&quot;&gt;@property&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;nonatomic&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;strong&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;DMRunLoopObserver&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rlObserver&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
@@ -226,54 +240,54 @@ timer) {
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;接着，我们需要一个便利 &lt;code class=&quot;highlighter-rouge&quot;&gt;add then remove&lt;/code&gt; Timer 的方法。为了方便测试 &lt;code class=&quot;highlighter-rouge&quot;&gt;stop&lt;/code&gt; Run Loop 的操作，我们提供一个 &lt;code class=&quot;highlighter-rouge&quot;&gt;BOOL&lt;/code&gt; 值来表示 &lt;code class=&quot;highlighter-rouge&quot;&gt;remove&lt;/code&gt; 时是否要移除该 Timer：&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;- (void)addTimerDuration:(int32_t)duration stopRunLoopOnEnd:(BOOL)stop
-{
-    CFRunLoopRef rl = [self.rl getCFRunLoop];
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;addTimerDuration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int32_t&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;duration&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;stopRunLoopOnEnd&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BOOL&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;stop&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;CFRunLoopRef&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;getCFRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
 
-    __block int32_t count = 0;
-    __block CFRunLoopTimerRef timer;
-    CFAbsoluteTime fireDate = CFAbsoluteTimeGetCurrent() + 1;
+    &lt;span class=&quot;n&quot;&gt;__block&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int32_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;__block&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopTimerRef&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;timer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;CFAbsoluteTime&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;fireDate&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFAbsoluteTimeGetCurrent&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 
-    timer = CFRunLoopTimerCreateWithHandler(kCFAllocatorDefault, fireDate, 1, 0, 0, ^(CFRunLoopTimerRef timer) {
-        count += 1;
-        NSLog(@&quot;background run loop: tick %d - %d&quot;, count, duration);
-        if (count == duration) {
-            CFRunLoopRemoveTimer(rl, timer, kCFRunLoopDefaultMode);
-            if (stop) {
-                CFRunLoopStop(rl);
-            }
-        }
-    });
-    CFRunLoopAddTimer(rl, timer, kCFRunLoopDefaultMode);
-}
+    &lt;span class=&quot;n&quot;&gt;timer&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopTimerCreateWithHandler&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kCFAllocatorDefault&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;fireDate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;CFRunLoopTimerRef&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;timer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;NSLog&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;@&quot;background run loop: tick %d - %d&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;count&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;count&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;CFRunLoopRemoveTimer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;timer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;kCFRunLoopDefaultMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;CFRunLoopStop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+            &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;CFRunLoopAddTimer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;timer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;kCFRunLoopDefaultMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;同样的，我们还需要一个类似的操作 Sources 的方法：&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;- (void)addCustomSource:(DMRunLoopSource *)source duration:(int32_t)duration stopRunLoopOnEnd:(BOOL)stop
-{
-    [source addToRunLoop:self.rl];
-    [source fireWithInterval:0.5 repeats:true onRunLoop:self.rl];
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;addCustomSource&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DMRunLoopSource&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;source&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int32_t&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;duration&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;stopRunLoopOnEnd&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BOOL&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;stop&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;source&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;addToRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;source&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;fireWithInterval&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;repeats&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;onRunLoop&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
 
-    if (duration &amp;lt;= 0) return;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;duration&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 
-    NSRunLoop *rl = self.rl;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(duration * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [source removeFromRunLoop:rl];
-        if (stop) {
-            CFRunLoopStop([rl getCFRunLoop]);
-        }
-    });
-}
+    &lt;span class=&quot;n&quot;&gt;NSRunLoop&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;dispatch_after&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dispatch_time&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DISPATCH_TIME_NOW&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int64_t&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;duration&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;NSEC_PER_SEC&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dispatch_get_main_queue&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;source&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;removeFromRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;CFRunLoopStop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;getCFRunLoop&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;这里需要提到的一点是，&lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoop&lt;/code&gt; 的接口是被设计为 Thread Safe 的，但是 &lt;code class=&quot;highlighter-rouge&quot;&gt;NSRunLoop&lt;/code&gt; 不是。如果 Run Loop 在非其所属的线程进行 &lt;code class=&quot;highlighter-rouge&quot;&gt;add&lt;/code&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;remove&lt;/code&gt; Timers &amp;amp; Sources 的操作，可能会导致程序运行 crash 或不符合预期。
 准备工作就绪，接下来在 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoop&lt;/code&gt; 和 &lt;code class=&quot;highlighter-rouge&quot;&gt;NSRunLoop&lt;/code&gt; 中，可以看到下面 2+3 种 &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt; Run Loop 的方式：&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;void CFRunLoopRun(void);
-CFRunLoopRunResult CFRunLoopRunInMode(CFRunLoopMode mode, CFTimeInterval seconds, Boolean returnAfterSourceHandled);
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopRun&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;CFRunLoopRunResult&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopRunInMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;CFRunLoopMode&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;mode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFTimeInterval&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;seconds&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Boolean&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;returnAfterSourceHandled&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
 
-- (void)run;
-- (void)runUntilDate:(NSDate *)limitDate;
-- (BOOL)runMode:(NSRunLoopMode)mode beforeDate:(NSDate *)limitDate;
+&lt;span class=&quot;k&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;run&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;runUntilDate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSDate&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;limitDate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;BOOL&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;runMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSRunLoopMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;mode&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;beforeDate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSDate&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;limitDate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;我们先从 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopRunInMode&lt;/code&gt; 看起：&lt;/p&gt;
@@ -284,92 +298,98 @@ CFRunLoopRunResult CFRunLoopRunInMode(CFRunLoopMode mode, CFTimeInterval seconds
 &lt;/ol&gt;
 
 &lt;p&gt;根据第 2、3 参数的注释，可以看到，Run Loop 的退出与时间有关、与 Sources event 的处理策略有关。再看看返回值：&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;typedef CF_ENUM(SInt32, CFRunLoopRunResult) {
-    kCFRunLoopRunFinished = 1, // remove 掉所有 Timers 和 Sources 时退出
-    kCFRunLoopRunStopped = 2, // 调用 CFRunLoopStop 函数时退出
-    kCFRunLoopRunTimedOut = 3, // 运行了最大 seconds 时退出
-    kCFRunLoopRunHandledSource = 4 // 处理了一次 Sources event 时退出
-};
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;typedef&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;CF_ENUM&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;SInt32&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopRunResult&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;kCFRunLoopRunFinished&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// remove 掉所有 Timers 和 Sources 时退出
+&lt;/span&gt;    &lt;span class=&quot;n&quot;&gt;kCFRunLoopRunStopped&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// 调用 CFRunLoopStop 函数时退出
+&lt;/span&gt;    &lt;span class=&quot;n&quot;&gt;kCFRunLoopRunTimedOut&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// 运行了最大 seconds 时退出
+&lt;/span&gt;    &lt;span class=&quot;n&quot;&gt;kCFRunLoopRunHandledSource&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;4&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// 处理了一次 Sources event 时退出
+&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopRunResult&lt;/code&gt; 的枚举总结了 Run Loop 退出时的全部可能，而 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopRun&lt;/code&gt; 函数只是 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopRunInMode&lt;/code&gt; 的一次封装，其 &lt;code class=&quot;highlighter-rouge&quot;&gt;seconds&lt;/code&gt; 取最大值，&lt;code class=&quot;highlighter-rouge&quot;&gt;returnAfterSourceHandled&lt;/code&gt; 取 &lt;code class=&quot;highlighter-rouge&quot;&gt;false&lt;/code&gt;。&lt;/p&gt;
 
 &lt;p&gt;为了验证，我们添加一个方法，它通过 &lt;code class=&quot;highlighter-rouge&quot;&gt;option&lt;/code&gt; 变量来决定 Run Loop 如何 &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt;：&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;- (void)loopRun:(NSInteger)option
-{
-    double duration = 5.5;
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;loopRun&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSInteger&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;option&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;double&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;duration&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 
-    switch (option) {
-        case 0: {
-            CFRunLoopRunResult re = CFRunLoopRunInMode(kCFRunLoopDefaultMode, duration, true);
-            NSLog(@&quot;background run loop: result %@&quot;, [NSRunLoop resultDescription:re]);
-        }
-            break;
+    &lt;span class=&quot;k&quot;&gt;switch&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;option&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;CFRunLoopRunResult&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopRunInMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kCFRunLoopDefaultMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;NSLog&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;@&quot;background run loop: result %@&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSRunLoop&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;resultDescription&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;break&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 
-        case 1: {
-            CFRunLoopRunResult re = CFRunLoopRunInMode(kCFRunLoopDefaultMode, duration, false);
-            NSLog(@&quot;background run loop: result %@&quot;, [NSRunLoop resultDescription:re]);
-        }
-            break;
+        &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;CFRunLoopRunResult&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;re&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopRunInMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kCFRunLoopDefaultMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;NSLog&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;@&quot;background run loop: result %@&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NSRunLoop&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;resultDescription&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;re&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt;
+        &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;break&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 
-        case 2:
-            CFRunLoopRun();
-            break;
+        &lt;span class=&quot;k&quot;&gt;case&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;CFRunLoopRun&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;break&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 
-        default:
-            break;
-    }
+        &lt;span class=&quot;nl&quot;&gt;default:&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;break&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 
-    NSLog(@&quot;background run loop: end&quot;);
-}
+    &lt;span class=&quot;n&quot;&gt;NSLog&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;@&quot;background run loop: end&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
-&lt;p&gt;这样，我们就可以通过组合不用的 Timers、Sources 和 &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt; option，来验证 Run Loop 的行为。具体的验证代码和运行结果，这里就不再赘述了，参考&lt;a href=&quot;https://www.baidu.com&quot;&gt;这个仓库&lt;/a&gt;。&lt;/p&gt;
+&lt;p&gt;这样，我们就可以通过组合不用的 Timers、Sources 和 &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt; option，来验证 Run Loop 的行为。具体的验证代码和运行结果在&lt;a href=&quot;https://github.com/dmelon/DMRunLoopDemo&quot;&gt;仓库&lt;/a&gt;里可以找到。&lt;/p&gt;
 
 &lt;p&gt;相对于 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoop&lt;/code&gt;，&lt;code class=&quot;highlighter-rouge&quot;&gt;NSRunLoop&lt;/code&gt; 的 &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt; 方法也不复杂，先看 &lt;code class=&quot;highlighter-rouge&quot;&gt;runMode:beforeDate:&lt;/code&gt; 方法，它其实就是 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopInMode&lt;/code&gt; 的方法的封装，只是 &lt;code class=&quot;highlighter-rouge&quot;&gt;returnAfterSourceHandled&lt;/code&gt; 默认设置成了 &lt;code class=&quot;highlighter-rouge&quot;&gt;true&lt;/code&gt;，这意味着，通过该方法跑起来的 Run Loop，在第一次收到 Source Event 时就会退出。&lt;/p&gt;
 
 &lt;p&gt;另外两个方法：&lt;code class=&quot;highlighter-rouge&quot;&gt;runUntilDate:&lt;/code&gt; 和 &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt;， 是对 &lt;code class=&quot;highlighter-rouge&quot;&gt;runMode:beforeDate:&lt;/code&gt; 的再次封装，可以实现 Run Loop 的不断循环。但是需要注意的是，由于其本质是循环调用 &lt;code class=&quot;highlighter-rouge&quot;&gt;runMode:beforeDate:&lt;/code&gt; 方法，那么其每次 loop 都要经过 &lt;code class=&quot;highlighter-rouge&quot;&gt;exit&lt;/code&gt; -&amp;gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;entry&lt;/code&gt;，但是 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopRun&lt;/code&gt; 是不需要的，对比一下下面两个方法及其打印结果：&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    // 每次循环，Run Loop 都要经过 exit -&amp;gt; entry，无法通过 CFRunLoopStop 停下来
-    [self addCustomSource:[DMRunLoopSource new] duration:-1 stopRunLoopOnEnd:false];
-    [self.rl run];
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;    &lt;span class=&quot;c1&quot;&gt;// 每次循环，Run Loop 都要经过 exit -&amp;gt; entry，无法通过 CFRunLoopStop 停下来
+&lt;/span&gt;    &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;self&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;addCustomSource&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DMRunLoopSource&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;new&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;stopRunLoopOnEnd&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;self&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rl&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;run&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
 
-    // 每次循环是从 afterWaiting -&amp;gt; beforeTimers，不经历 exit、entry，可以通过 CFRunLoopStop 停下来
-    [self addCustomSource:[DMRunLoopSource new] duration:-1 stopRunLoopOnEnd:false];
-    CFRunLoopRun();
+    &lt;span class=&quot;c1&quot;&gt;// 每次循环是从 afterWaiting -&amp;gt; beforeTimers，不经历 exit、entry，可以通过 CFRunLoopStop 停下来
+&lt;/span&gt;    &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;self&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;addCustomSource&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DMRunLoopSource&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;new&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;duration&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;stopRunLoopOnEnd&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;];&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;CFRunLoopRun&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;简而言之，Core Foundation 中的 &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt; 走的是 inner loop，Foundation 中的 &lt;code class=&quot;highlighter-rouge&quot;&gt;run&lt;/code&gt; 走的是 outside loop。&lt;/p&gt;
 
 &lt;p&gt;在官方文档中，有一个 Run Loop 的使用框架，它可以条件式地控制 Run Loop 的 &lt;code class=&quot;highlighter-rouge&quot;&gt;start&lt;/code&gt; 和 &lt;code class=&quot;highlighter-rouge&quot;&gt;stop&lt;/code&gt;：&lt;/p&gt;
-&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;- (void)main
-{
-    // Set up an autorelease pool here if not using garbage collection.
-    BOOL done = NO;
+&lt;div class=&quot;language-objc highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;main&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// Set up an autorelease pool here if not using garbage collection.
+&lt;/span&gt;    &lt;span class=&quot;n&quot;&gt;BOOL&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;done&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;NO&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 
-    // Add your sources or timers to the run loop and do any other setup.
-    do
-    {
-        // Start the run loop but return after each source is handled.
-        SInt32 result = CFRunLoopRunInMode(kCFRunLoopDefaultMode, 10, YES);
+    &lt;span class=&quot;c1&quot;&gt;// Add your sources or timers to the run loop and do any other setup.
+&lt;/span&gt;    &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;c1&quot;&gt;// Start the run loop but return after each source is handled.
+&lt;/span&gt;        &lt;span class=&quot;n&quot;&gt;SInt32&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;CFRunLoopRunInMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;kCFRunLoopDefaultMode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;10&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;YES&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
 
-        // If a source explicitly stopped the run loop, or if there are no
-        // sources or timers, go ahead and exit.
-        if ((result == kCFRunLoopRunStopped) || (result == kCFRunLoopRunFinished))
-            done = YES;
+        &lt;span class=&quot;c1&quot;&gt;// If a source explicitly stopped the run loop, or if there are no
+&lt;/span&gt;        &lt;span class=&quot;c1&quot;&gt;// sources or timers, go ahead and exit.
+&lt;/span&gt;        &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;kCFRunLoopRunStopped&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;||&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;kCFRunLoopRunFinished&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+            &lt;span class=&quot;n&quot;&gt;done&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;YES&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
 
-        // Check for any other exit conditions here and set the
-        // done variable as needed.
-    }
-    while (!done);
+        &lt;span class=&quot;c1&quot;&gt;// Check for any other exit conditions here and set the
+&lt;/span&gt;        &lt;span class=&quot;c1&quot;&gt;// done variable as needed.
+&lt;/span&gt;    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;done&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
 
-    // Clean up code here. Be sure to release any allocated autorelease pools.
-}
+    &lt;span class=&quot;c1&quot;&gt;// Clean up code here. Be sure to release any allocated autorelease pools.
+&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;在实际使用中，如果我们真的确信某个 Run Loop 的生命周期是伴随整个 App 的，那么就简单调用 &lt;code class=&quot;highlighter-rouge&quot;&gt;CFRunLoopRun&lt;/code&gt; 或 &lt;code class=&quot;highlighter-rouge&quot;&gt;[NSRunLoop run]&lt;/code&gt; 就好了。（AFNetworking 2.x 就是这么做的）&lt;/p&gt;
 
-&lt;h2 id=&quot;mode&quot;&gt;Mode&lt;/h2&gt;
-&lt;p&gt;在之前设计 Mode 的地方，我们大部分使用的是 &lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt; 值，其实它的主要作用是过滤。对 Run Loop 设置 Mode 可以过滤掉当前不关心的，从而提高当前主要 event 的响应速度。比如，当用户滑动 ScrollView 时，Run Loop 实际上会进入一个隐藏的 &lt;code class=&quot;highlighter-rouge&quot;&gt;UITrackingRunLoopMode&lt;/code&gt;，此时 &lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt; 下的 Timers 和 Sourcers event 就无法得到处理。倘若我们希望我们的源得到最快的处理，可以使用 &lt;code class=&quot;highlighter-rouge&quot;&gt;CommonModes&lt;/code&gt;，这意味着无论当前 Run Loop 在哪个 Mode 下，event 都能得到处理。&lt;/p&gt;</content><author><name>陈东</name></author><summary type="html">勤劳的 Run Loop 一个可交互的应用程序，可以在用户使用时立即响应，执行一些任务。在任务完成，用户也没有更多操作时，进入休眠，等待下次的用户操作。就像一位勤劳的佣人，只要有吩咐，立马就会忙碌起来。工作完成后，总是站在身边安静待命。</summary></entry><entry><title type="html">init</title><link href="http://localhost:4000/blog/init" rel="alternate" type="text/html" title="init" /><published>2019-03-18T00:00:00+08:00</published><updated>2019-03-18T00:00:00+08:00</updated><id>http://localhost:4000/blog/init</id><content type="html" xml:base="http://localhost:4000/blog/init">&lt;p&gt;最近即将离开工作了 3 年的公司，虽然有很多的不舍，但是还是想要为了更多的可能性去积极拥抱不安全感。&lt;/p&gt;
+&lt;h1 id=&quot;perform-selector&quot;&gt;Perform Selector&lt;/h1&gt;
+&lt;p&gt;在实践中，我们通常有从一个后台线程向主线程通讯的需求，比如后台图片下载完成后，通知主线程渲染。这个时候，除了最常见的 &lt;code class=&quot;highlighter-rouge&quot;&gt;dispatch_asyn&lt;/code&gt; 写法，&lt;code class=&quot;highlighter-rouge&quot;&gt;performSelectorOnMainThread&lt;/code&gt; 也是一种选择。Run Loop 就是这一类方法的基础，也就是说，如果目标 Thread 的 Run Loop 并没有跑起来，那么这个 &lt;code class=&quot;highlighter-rouge&quot;&gt;perform&lt;/code&gt; 就会无效，因为其本质是系统通过 Sources 实现的。&lt;/p&gt;
+
+&lt;h1 id=&quot;最后的-mode&quot;&gt;最后的 Mode&lt;/h1&gt;
+&lt;p&gt;在之前涉及 Mode 的地方，我们大部分使用的是 &lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt; 值，其实它的主要作用是过滤。对 Run Loop 设置 Mode 可以过滤掉当前不关心的，从而提高当前主要 event 的响应速度。比如，当用户滑动 ScrollView 时，Run Loop 实际上会进入一个隐藏的 &lt;code class=&quot;highlighter-rouge&quot;&gt;UITrackingRunLoopMode&lt;/code&gt;，此时 &lt;code class=&quot;highlighter-rouge&quot;&gt;default&lt;/code&gt; 下的 Timers 和 Sourcers event 就无法得到处理。倘若我们希望我们的源得到最快的处理，可以在加入到 Run Loop 时使用 &lt;code class=&quot;highlighter-rouge&quot;&gt;CommonModes&lt;/code&gt;，这意味着无论当前 Run Loop 在哪个 Mode 下，event 都能得到处理。&lt;/p&gt;
+
+&lt;h1 id=&quot;总结&quot;&gt;总结&lt;/h1&gt;
+&lt;p&gt;Run Loop 通过不断循环去检查注册的 Event 源是否有事件要处理，在空闲的时候使线程进入 sleep 状态，维持线程常驻，同时节省系统资源。它是 Thread 间进行线程通讯的基础设施，包括像 &lt;code class=&quot;highlighter-rouge&quot;&gt;performSelector&lt;/code&gt; 一类的方法。在实际运用中，Run Loop 并不是应用最多的多线程编程方案，像 GCD 和 NSOperation 这种建立在 Thread 之上的方案才是多线程编程时的首要选择。&lt;/p&gt;</content><author><name>陈东</name></author><summary type="html">勤劳的 Run Loop 一个可交互的应用程序，可以在用户使用时立即响应，执行一些任务。在任务完成，用户也没有更多操作时，进入休眠，等待下次的用户操作。就像一位勤劳的佣人，只要有吩咐，立马就会忙碌起来。工作完成后，总是站在身边安静待命。</summary></entry><entry><title type="html">init</title><link href="http://localhost:4000/blog/init" rel="alternate" type="text/html" title="init" /><published>2019-03-18T00:00:00+08:00</published><updated>2019-03-18T00:00:00+08:00</updated><id>http://localhost:4000/blog/init</id><content type="html" xml:base="http://localhost:4000/blog/init">&lt;p&gt;最近即将离开工作了 3 年的公司，虽然有很多的不舍，但是还是想要为了更多的可能性去积极拥抱不安全感。&lt;/p&gt;
 
 &lt;p&gt;作为第一件想要辞职想要的事情就是建立起一个属于自己的技术博客，把之前的积累，未来的成长，一点一点地记录下来。&lt;/p&gt;
 
